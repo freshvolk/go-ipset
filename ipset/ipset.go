@@ -18,7 +18,6 @@ limitations under the License.
 package ipset
 
 import (
-	"errors"
 	"fmt"
 	"os/exec"
 	"regexp"
@@ -27,11 +26,13 @@ import (
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/coreos/go-semver/semver"
+	"github.com/pkg/errors"
 )
 
 const minIpsetVersion = "6.0.0"
 
 var (
+	ipSetRegex           *regexp.Regexp
 	ipsetPath            string
 	errIpsetNotFound     = errors.New("Ipset utility not found")
 	errIpsetNotSupported = errors.New("Ipset utility version is not supported, requiring version >= 6.0")
@@ -56,6 +57,8 @@ type IPSet struct {
 }
 
 func initCheck() error {
+	ipSetRegex = regexp.MustCompile(`(?s)Name:\s(\S+)\nType:\s(\w+:\w+)\n.*Header:\s([\w \d]+)\n.*`)
+
 	if ipsetPath == "" {
 		path, err := exec.LookPath("ipset")
 		if err != nil {
@@ -76,9 +79,6 @@ func initCheck() error {
 }
 
 func (s *IPSet) createHashSet(name string) error {
-	/*	out, err := exec.Command("/usr/bin/sudo",
-		ipsetPath, "create", name, s.HashType, "family", s.HashFamily, "hashsize", strconv.Itoa(s.HashSize),
-		"maxelem", strconv.Itoa(s.MaxElem), "timeout", strconv.Itoa(s.Timeout), "-exist").CombinedOutput()*/
 	out, err := exec.Command(ipsetPath, "create", name, s.HashType, "family", s.HashFamily, "hashsize", strconv.Itoa(s.HashSize),
 		"maxelem", strconv.Itoa(s.MaxElem), "timeout", strconv.Itoa(s.Timeout), "-exist").CombinedOutput()
 	if err != nil {
@@ -87,6 +87,66 @@ func (s *IPSet) createHashSet(name string) error {
 	out, err = exec.Command(ipsetPath, "flush", name).CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("error flushing ipset %s: %v (%s)", name, err, out)
+	}
+	return nil
+}
+
+// NewFromExisting creates an IPSet from an existing IPSet
+func NewFromExisting(name string) (*IPSet, error) {
+	if err := initCheck(); err != nil {
+		return nil, err
+	}
+
+	log.Debug("Checking for existence of %s", name)
+	err := Exists(name)
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed checking for existence of %s ipset", name)
+	}
+
+	out, err := exec.Command(ipsetPath, "list", name).CombinedOutput()
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed listing ipset %s", name)
+	}
+
+	ipSet := IPSet{Name: name}
+
+	matches := ipSetRegex.FindAllSubmatch(out, -1)
+	ipSet.HashType = string(matches[0][2])
+	opts := strings.Split(string(matches[0][3]), " ")
+	for i, opt := range opts {
+		switch opt {
+		case "family":
+			ipSet.HashFamily = opts[i+1]
+			break
+		case "hashsize":
+			ipSet.HashSize, err = strconv.Atoi(opts[i+1])
+			if err != nil {
+				return nil, errors.Wrap(err, "error converting hashsize from string")
+			}
+			break
+		case "maxelem":
+			ipSet.MaxElem, err = strconv.Atoi(opts[i+1])
+			if err != nil {
+				return nil, errors.Wrap(err, "error converting maxelem from string")
+			}
+			break
+		case "timeout":
+			ipSet.Timeout, err = strconv.Atoi(opts[i+1])
+			if err != nil {
+				return nil, errors.Wrap(err, "error converting timeout from string")
+			}
+			break
+		}
+	}
+
+	return &ipSet, nil
+}
+
+// Exists checks for existence of an ipset
+func Exists(name string) error {
+	_, err := exec.Command(ipsetPath, "list", name).CombinedOutput()
+	if err != nil {
+		return errors.Wrapf(err, "error checking if %s exists", name)
 	}
 	return nil
 }
