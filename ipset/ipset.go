@@ -56,13 +56,13 @@ type IPSet struct {
 	Timeout    int
 }
 
-func initCheck() error {
+func init() {
 	ipSetRegex = regexp.MustCompile(`(?s)Name:\s(\S+)\nType:\s(\w+:\w+)\n.*Header:\s([\w \d]+)\n.*`)
 
 	if ipsetPath == "" {
 		path, err := exec.LookPath("ipset")
 		if err != nil {
-			return errIpsetNotFound
+			log.Panic(errIpsetNotFound)
 		}
 		ipsetPath = path
 		supportedVersion, err := getIpsetSupportedVersion()
@@ -70,12 +70,10 @@ func initCheck() error {
 			log.Warnf("Error checking ipset version, assuming version at least 6.0.0: %v", err)
 			supportedVersion = true
 		}
-		if supportedVersion {
-			return nil
+		if !supportedVersion {
+			log.Panic(errIpsetNotSupported)
 		}
-		return errIpsetNotSupported
 	}
-	return nil
 }
 
 func (s *IPSet) createHashSet(name string) error {
@@ -93,10 +91,6 @@ func (s *IPSet) createHashSet(name string) error {
 
 // NewFromExisting creates an IPSet from an existing IPSet
 func NewFromExisting(name string) (*IPSet, error) {
-	if err := initCheck(); err != nil {
-		return nil, err
-	}
-
 	log.Debug("Checking for existence of %s", name)
 	err := Exists(name)
 	if err != nil {
@@ -144,6 +138,7 @@ func NewFromExisting(name string) (*IPSet, error) {
 
 // Exists checks for existence of an ipset
 func Exists(name string) error {
+	fmt.Println(ipsetPath)
 	_, err := exec.Command(ipsetPath, "list", name).CombinedOutput()
 	if err != nil {
 		return errors.Wrapf(err, "error checking if %s exists", name)
@@ -171,10 +166,6 @@ func New(name string, hashtype string, p *Params) (*IPSet, error) {
 	// Check if hashtype is a type of hash
 	if !strings.HasPrefix(hashtype, "hash:") {
 		return nil, fmt.Errorf("not a hash type: %s", hashtype)
-	}
-
-	if err := initCheck(); err != nil {
-		return nil, err
 	}
 
 	s := IPSet{name, hashtype, p.HashFamily, p.HashSize, p.MaxElem, p.Timeout}
@@ -296,7 +287,6 @@ func (s *IPSet) Destroy() error {
 
 // DestroyAll is used to destroy the set.
 func DestroyAll() error {
-	initCheck()
 	out, err := exec.Command(ipsetPath, "destroy").CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("error destroying set %s (%s)", err, out)
