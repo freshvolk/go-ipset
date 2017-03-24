@@ -138,7 +138,6 @@ func NewFromExisting(name string) (*IPSet, error) {
 
 // Exists checks for existence of an ipset
 func Exists(name string) error {
-	fmt.Println(ipsetPath)
 	_, err := exec.Command(ipsetPath, "list", name).CombinedOutput()
 	if err != nil {
 		return errors.Wrapf(err, "error checking if %s exists", name)
