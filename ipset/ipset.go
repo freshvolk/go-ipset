@@ -237,6 +237,15 @@ func (s *IPSet) Add(entry string, timeout int) error {
 	return nil
 }
 
+// AddForever is used to add the specified entry to the set w/o timeout
+func (s *IPSet) AddForever(entry string) error {
+	out, err := exec.Command(ipsetPath, "add", s.Name, entry, "-exist").CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("error adding entry %s: %v (%s)", entry, err, out)
+	}
+	return nil
+}
+
 // AddOption is used to add the specified entry to the set.
 // A timeout of 0 means that the entry will be stored permanently in the set.
 func (s *IPSet) AddOption(entry string, option string, timeout int) error {
