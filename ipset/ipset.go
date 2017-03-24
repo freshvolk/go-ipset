@@ -57,7 +57,7 @@ type IPSet struct {
 }
 
 func init() {
-	ipSetRegex = regexp.MustCompile(`(?s)Name:\s(\S+)\nType:\s(\w+:\w+)\n.*Header:\s([\w \d]+)\n.*`)
+	ipSetRegex = regexp.MustCompile(`(?s)Name:\s(\S+)\nType:\s(\w+:\w+(?:,\w+))\n.*Header:\s([\w \d]+)\n.*`)
 
 	if ipsetPath == "" {
 		path, err := exec.LookPath("ipset")
